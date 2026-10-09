@@ -14,7 +14,7 @@ fi
 
 method=${1:-}
 if [[ -z $method ]]; then
-  python "$OMARCHY_PATH/default/input-methods/typing.py" input
+  python "$OMARCHY_PATH/default/input-methods/typing_setup.py" input
   exit
 fi
 

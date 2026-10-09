@@ -114,12 +114,15 @@ class Indicator:
   def select_next(self):
     state = snapshot(self.bus)
     methods = state["methods"]
-    if len(methods) < 2:
+    state["current"] = self.pending or state["current"] or self.last or next(iter(methods), "")
+    devices = subprocess.run(["hyprctl", "-j", "devices"], check=True, text=True, capture_output=True)
+    keyboards = json.loads(devices.stdout).get("keyboards", [])
+    following, index = cycle_choice(state, keyboards)
+    if following is None:
       return
-    current = self.pending or state["current"] or self.last or methods[0]
-    if current not in methods:
-      current = methods[0]
-    self.pending = methods[(methods.index(current) + 1) % len(methods)]
+    self.pending = following
+    for command in layout_switches(keyboards, index) if index is not None else []:
+      subprocess.run(command, check=True, capture_output=True)
     self.refresh()
 
   def refresh(self):
