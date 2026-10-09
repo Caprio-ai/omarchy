@@ -244,7 +244,9 @@ BarWidget {
     horizontalMargin: 6
     tooltipText: KeyboardLayoutModel.inputTooltip(root.inputState, root.layoutFull, root.multipleLayouts)
     onPressed: function(button) {
-      if (root.multipleInputs && button === Qt.LeftButton) {
+      if (root.multipleLayouts && button === Qt.LeftButton) {
+        root.bar.run("omarchy-input-method cycle")
+      } else if (root.multipleInputs && button === Qt.LeftButton) {
         InputMethodState.cycle()
       } else if (root.multipleLayouts) {
         root.cycleLayout()

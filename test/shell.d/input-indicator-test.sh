@@ -7,6 +7,8 @@ OMARCHY_PATH="$ROOT" /usr/bin/python - <<'PY'
 import importlib.util
 import os
 from unittest.mock import patch
+import json
+import subprocess
 
 spec = importlib.util.spec_from_file_location("indicator", os.environ["OMARCHY_PATH"] + "/default/input-methods/indicator.py")
 indicator = importlib.util.module_from_spec(spec)
@@ -72,10 +74,10 @@ with patch.object(indicator, "snapshot", side_effect=lambda bus: dict(live)), pa
   assert reader.pending == ""
 print("ok - desktop clicks update the label, cycle pending choices, and apply once a text context exists")
 
-with patch.object(indicator.Gio, "bus_get_sync", return_value=None), patch.object(indicator, "snapshot", return_value={"methods": ["keyboard-us", "keyboard-fr"], "current": "keyboard-us"}), patch.object(indicator, "call") as call, patch.object(indicator.subprocess, "run") as process:
+with patch.object(indicator.Gio, "bus_get_sync", return_value=None), patch.object(indicator, "snapshot", return_value={"methods": ["keyboard-us", "keyboard-fr"], "current": "keyboard-us"}), patch.object(indicator, "call") as call, patch.object(indicator.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout='{"keyboards": []}')) as process:
   indicator.cycle_input()
   assert call.call_args.args[2].unpack() == ("keyboard-fr",)
-  process.assert_not_called()
+  assert process.call_count == 1
 print("ok - the shortcut cycles Fcitx keyboard methods without requiring a bar widget")
 
 keyboards = [
@@ -96,7 +98,7 @@ print("ok - layout switching synchronizes matching devices, wraps, and preserves
 
 import json
 import subprocess
-with patch.object(indicator.Gio, "bus_get_sync", return_value=None), patch.object(indicator, "snapshot", return_value={"methods": ["keyboard-us"]}), patch.object(indicator.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps({"keyboards": keyboards}))) as process:
+with patch.object(indicator.Gio, "bus_get_sync", return_value=None), patch.object(indicator, "snapshot", return_value={"methods": ["keyboard-us"], "current": "keyboard-us"}), patch.object(indicator.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps({"keyboards": keyboards}))) as process:
   indicator.cycle_input()
   assert process.call_args_list[0].args[0] == ["hyprctl", "-j", "devices"]
   assert [call.args[0] for call in process.call_args_list[1:]] == indicator.layout_switches(keyboards)
@@ -105,4 +107,24 @@ with patch.object(indicator.Gio, "bus_get_sync", side_effect=indicator.GLib.Erro
   indicator.cycle_input()
   assert [call.args[0] for call in process.call_args_list[1:]] == indicator.layout_switches(keyboards)
 print("ok - compositor layouts switch even when the Fcitx bus is unavailable")
+state = {"methods": ["keyboard-us", "mozc", "hangul"], "current": "keyboard-us"}
+keyboards[1]["active_layout_index"] = 0
+assert indicator.cycle_choice(state, keyboards) == ("keyboard-us", 1)
+with patch.object(indicator.Gio, "bus_get_sync", return_value=None), patch.object(indicator, "snapshot", return_value=state), patch.object(indicator, "call") as call, patch.object(indicator.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps({"keyboards": keyboards}))) as process:
+  indicator.cycle_input()
+  call.assert_not_called()
+  assert all(command.args[0][-1] == "1" for command in process.call_args_list[1:])
+  assert len(process.call_args_list) > 1
+keyboards[1]["active_layout_index"] = 1
+assert indicator.cycle_choice(state, keyboards) == ("mozc", None)
+state["current"] = "mozc"
+assert indicator.cycle_choice(state, keyboards) == ("hangul", None)
+state["current"] = "hangul"
+assert indicator.cycle_choice(state, keyboards) == ("keyboard-us", 0)
+with patch.object(indicator.Gio, "bus_get_sync", return_value=None), patch.object(indicator, "snapshot", return_value=state), patch.object(indicator, "call") as call, patch.object(indicator.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps({"keyboards": keyboards}))) as process:
+  indicator.cycle_input()
+  assert call.call_args.args[2].unpack() == ("keyboard-us",)
+  assert all(command.args[0][-1] == "0" for command in process.call_args_list[1:])
+print("ok - layouts and composition engines share one cycle and returning to direct input resets the layout")
+
 PY

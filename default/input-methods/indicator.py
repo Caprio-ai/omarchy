@@ -36,41 +36,72 @@ def cycle(bus, state=None):
     call(bus, "SetCurrentIM", GLib.Variant("(s)", (following,)))
 
 
-def layout_switches(keyboards):
+def layout_keyboard(keyboards):
   typed = [keyboard for keyboard in keyboards if not re.match(
     r"^(hl-virtual-keyboard|power-button|sleep-button|lid-switch|video-bus)", keyboard.get("name", ""))]
   typed = [item for item in typed if len(item.get("layout", "").split(",")) > 1]
   if not typed:
-    return []
+    return None
   # Consumer controls also carry the seat layout. Its frequency keeps an
   # individually configured keyboard from taking over the desktop shortcut.
   counts = Counter(item.get("layout", "") for item in keyboards)
   layout = max((item["layout"] for item in typed), key=lambda layout: counts[layout])
   keyboard = max((item for item in typed if item["layout"] == layout),
                  key=lambda item: item.get("active_layout_index", 0))
-  layout = keyboard.get("layout", "")
-  count = len(layout.split(","))
-  if count < 2:
+  return keyboard
+
+
+def layout_switches(keyboards, index=None):
+  keyboard = layout_keyboard(keyboards)
+  if keyboard is None:
     return []
-  following = (keyboard.get("active_layout_index", 0) + 1) % count
+  layout = keyboard["layout"]
+  following = index if index is not None else (keyboard.get("active_layout_index", 0) + 1) % len(layout.split(","))
   return [["hyprctl", "switchxkblayout", item["name"], str(following)]
           for item in keyboards if item.get("layout") == layout and item.get("name")]
 
 
+def cycle_choice(state, keyboards):
+  methods = state.get("methods", [])
+  keyboard = layout_keyboard(keyboards)
+  primary = next((method for method in methods if method.startswith("keyboard-")), None)
+  if keyboard is None or primary is None:
+    current = state.get("current")
+    if len(methods) > 1 and current in methods:
+      return methods[(methods.index(current) + 1) % len(methods)], None
+    return None, None
+  # One direct-input method represents all compositor layouts. Composition
+  # engines follow them in the user's configured order.
+  choices = []
+  for method in methods:
+    if method == primary:
+      choices.extend((method, index) for index in range(len(keyboard["layout"].split(","))))
+    else:
+      choices.append((method, None))
+  current = state.get("current") or primary
+  position = (current, keyboard.get("active_layout_index", 0) if current == primary else None)
+  if position not in choices:
+    return None, None
+  return choices[(choices.index(position) + 1) % len(choices)]
+
+
 def cycle_input():
-  # Fcitx keyboard entries count as input methods too. With just one method,
-  # switch the compositor layouts even if the bar widget has been removed.
   try:
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     state = snapshot(bus)
   except GLib.Error:
     state = {}
-  if len(state.get("methods", [])) > 1:
-    cycle(bus, state)
+  devices = subprocess.run(["hyprctl", "-j", "devices"], check=True, text=True, capture_output=True)
+  keyboards = json.loads(devices.stdout).get("keyboards", [])
+  if not state.get("methods"):
+    switches = layout_switches(keyboards)
   else:
-    devices = subprocess.run(["hyprctl", "-j", "devices"], check=True, text=True, capture_output=True)
-    for command in layout_switches(json.loads(devices.stdout).get("keyboards", [])):
-      subprocess.run(command, check=True, capture_output=True)
+    method, index = cycle_choice(state, keyboards)
+    if method is not None and method != state.get("current"):
+      call(bus, "SetCurrentIM", GLib.Variant("(s)", (method,)))
+    switches = layout_switches(keyboards, index) if index is not None else []
+  for command in switches:
+    subprocess.run(command, check=True, capture_output=True)
 
 
 class Indicator:

@@ -120,7 +120,8 @@ function inputLabel(state, fallback) {
 function inputTooltip(state, layout, multipleLayouts) {
   if (!state || !state.methods || state.methods.length < 2)
     return layout + (multipleLayouts ? " · Super + I" : "")
-  return (state.name || layout).replace(/^Keyboard - /, "") + " · Super + I"
+  var name = state.current && state.current.indexOf("keyboard-") === 0 ? layout : (state.name || layout)
+  return name.replace(/^Keyboard - /, "") + " · Super + I"
 }
 
 function showIndicator(layoutLabel, multipleLayouts, multipleInputs) {
