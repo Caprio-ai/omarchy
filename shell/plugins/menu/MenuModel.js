@@ -509,9 +509,10 @@ function dmenuValue(option) {
   return parts.join("\t")
 }
 
-function dmenuSelections(options, selected) {
-  return options.map(dmenuValue).filter(function(value, index, values) {
-    return selected.indexOf(value) !== -1 && values.indexOf(value) === index
+function dmenuSelections(options, selected, preserveOrder) {
+  var available = options.map(dmenuValue)
+  return (preserveOrder ? selected : available).filter(function(value, index, values) {
+    return available.indexOf(value) !== -1 && selected.indexOf(value) !== -1 && values.indexOf(value) === index
   })
 }
 

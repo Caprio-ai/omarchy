@@ -800,8 +800,9 @@ Item {
           var selected = MenuModel.toggleDmenuSelection(root.dmenuSelected, value)
           if (root.dmenuOnChange.length > 0) {
             if (selectionProc.running) return
+            selectionProc.collected = ""
             selectionProc.serial = root.requestSerial
-            selectionProc.selected = MenuModel.dmenuSelections(root.dmenuOptions, selected)
+            selectionProc.selected = MenuModel.dmenuSelections(root.dmenuOptions, selected, true)
             selectionProc.command = root.dmenuOnChange.concat([JSON.stringify(selectionProc.selected)])
             selectionProc.running = true
           } else {
@@ -912,7 +913,7 @@ Item {
     dmenuMultiple = mode === "select" && payload.multiple === true
     dmenuOnChange = dmenuMultiple && Array.isArray(payload.onChange)
       && payload.onChange.every(function(arg) { return typeof arg === "string" }) ? payload.onChange : []
-    dmenuSelected = MenuModel.dmenuSelections(dmenuOptions, Array.isArray(payload.selected) ? payload.selected : [])
+    dmenuSelected = MenuModel.dmenuSelections(dmenuOptions, Array.isArray(payload.selected) ? payload.selected : [], dmenuOnChange.length > 0)
     selectionFile = String(payload.selectionFile || "")
     doneFile = String(payload.doneFile || "")
     requestActive = !!doneFile
@@ -993,9 +994,18 @@ Item {
     id: selectionProc
     property int serial: 0
     property var selected: []
+    property string collected: ""
+    stdout: StdioCollector { onStreamFinished: selectionProc.collected = text }
     onExited: function(exitCode) {
       if (serial !== root.requestSerial || !root.dmenuActive) return
-      if (exitCode === 0) root.dmenuSelected = selected
+      if (exitCode === 0) {
+        var applied = selected
+        if (collected.trim()) {
+          try { applied = JSON.parse(collected) } catch (error) { return }
+          if (!Array.isArray(applied)) return
+        }
+        root.dmenuSelected = MenuModel.dmenuSelections(root.dmenuOptions, applied, true)
+      }
       root.updateDmenuChecks()
     }
   }
@@ -1281,6 +1291,16 @@ Item {
             clip: true
             spacing: root.rowSpacing
             boundsBehavior: Flickable.StopAtBounds
+
+            WheelHandler {
+              target: null
+              onWheel: function(event) {
+                var delta = event.pixelDelta.y || event.angleDelta.y / 120 * root.rowHeightForDetail("") * 3
+                var bottom = resultList.originY + Math.max(0, resultList.contentHeight - resultList.height)
+                resultList.contentY = Math.max(resultList.originY, Math.min(bottom, resultList.contentY - delta))
+                event.accepted = true
+              }
+            }
 
             section.property: "section"
             section.criteria: ViewSection.FullString

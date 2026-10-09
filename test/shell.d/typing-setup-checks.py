@@ -23,9 +23,22 @@ class TypingSetupTest(unittest.TestCase):
     with self.assertRaises(ValueError):
       typing.keyboard_values([])
 
-  def test_keyboard_catalog_includes_variants(self):
-    with patch.object(typing, "controller", return_value=[["us", "English (US)", ["en"], [["intl", "English (US, international)", ["en"]]]]]):
-      self.assertEqual(typing.keyboard_catalog(), {"us": "English (US)", "us:intl": "English (US, international)"})
+  def test_keyboard_catalog_uses_installer_choices(self):
+    catalog = typing.keyboard_catalog()
+    self.assertEqual(catalog["us"], "English (US)")
+    self.assertEqual(catalog["gb"], "English (UK)")
+    self.assertEqual(catalog["us:colemak"], "English (US, Colemak)")
+    self.assertEqual(catalog["ch"], "German (Switzerland)")
+    self.assertEqual(catalog["la"], "Lao")
+    self.assertEqual(catalog["latam"], "Spanish (Latin American)")
+    self.assertNotIn("us:intl", catalog)
+    self.assertLess(len(catalog), 60)
+
+  def test_readding_input_keeps_its_original_override(self):
+    self.assertEqual(typing.input_items([["keyboard-us", ""]], ["mozc"], {"mozc": "jp"}),
+                     [["keyboard-us", ""], ["mozc", "jp"]])
+    self.assertEqual(typing.input_items([["keyboard-us", ""], ["mozc", "us"]], ["mozc"], {"mozc": "jp"}),
+                     [["keyboard-us", ""], ["mozc", "us"]])
 
   def test_input_deselection_keeps_keyboard_and_selected_overrides(self):
     items = [["keyboard-us", ""], ["mozc", "jp"], ["hangul", ""], ["custom", "de"]]
@@ -48,23 +61,27 @@ class TypingSetupTest(unittest.TestCase):
   def test_picker_preselects_current_entries_and_returns_empty_selection(self):
     result = subprocess.CompletedProcess([], 0, stdout="[]")
     with patch.object(typing.subprocess, "run", return_value=result) as process:
-      self.assertEqual(typing.choose("Inputs", {"mozc": "Japanese", "hangul": "Korean"}, ["hangul"], "input"), [])
+      self.assertIsNone(typing.choose("Inputs", {"mozc": "Japanese", "hangul": "Korean"}, ["hangul"], "input"))
       args = process.call_args.args[0]
       self.assertEqual(args[2], "\tKorean")
       self.assertIn("--multiple", args)
       self.assertEqual(args[-2:], ["--selected", "Korean"])
 
-  def test_picker_rejects_unknown_returned_values(self):
-    with patch.object(typing.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout='["unknown"]')):
-      with self.assertRaises(ValueError):
-        typing.choose("Inputs", {"mozc": "Japanese"}, [], "input")
+  def test_apply_rejects_unknown_values(self):
+    with self.assertRaises(ValueError):
+      typing.apply_selection("input", {"catalog": {"mozc": "Japanese"}}, ["unknown"])
 
   def test_immediate_selection_removes_an_input_and_accepts_keyboard_only(self):
-    with patch.object(typing, "save_inputs") as save:
-      typing.apply_selection("input", {"mozc": "Japanese", "hangul": "Korean"}, ["Japanese"])
-      save.assert_called_once_with(["mozc"])
-      typing.apply_selection("input", {"mozc": "Japanese"}, [])
-      self.assertEqual(save.call_args.args, ([],))
+    with patch.object(typing, "save_inputs") as save, patch("builtins.print"):
+      typing.apply_selection("input", {"catalog": {"mozc": "Japanese", "hangul": "Korean"}}, ["Japanese"])
+      save.assert_called_once_with(["mozc"], None)
+      typing.apply_selection("input", {"catalog": {"mozc": "Japanese"}}, [])
+      self.assertEqual(save.call_args.args, ([], None))
+
+  def test_keyboard_checks_reflect_normalized_selection(self):
+    with patch.object(typing, "save_keyboard"), patch.object(typing, "keyboard_selection", return_value=["us", "ru"]), patch("builtins.print") as output:
+      typing.apply_selection("keyboard", {"catalog": {"us": "English", "ru": "Russian"}}, ["Russian"])
+      self.assertEqual(json.loads(output.call_args.args[0]), ["English", "Russian"])
 
   def test_keyboard_override_failure_preserves_symlink_and_restores_settings(self):
     with tempfile.TemporaryDirectory() as temporary:

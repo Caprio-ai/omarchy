@@ -10,16 +10,30 @@ import sys
 import configure as setup
 
 
-def controller(method):
-  return json.loads(setup.run(setup.CONTROLLER[:1] + ["--json=short"] + setup.CONTROLLER[1:] + [method]))["data"][0]
-
-
 def keyboard_catalog():
+  # Read the same choices as the ISO and first-boot form, then convert console
+  # keymaps through systemd's mapping, just as localectl does during install.
+  choices = setup.run(["bash", "-c", 'source "$1"; printf "%s\\n" "$OMARCHY_KEYBOARD_LAYOUTS"',
+                       "bash", str(setup.ROOT / "install/provisioning/setup-form.sh")])
+  mappings = {}
+  for line in Path("/usr/share/systemd/kbd-model-map").read_text().splitlines():
+    fields = line.split()
+    if not fields or fields[0].startswith("#"):
+      continue
+    layout = fields[1].split(",")[0]
+    variant = fields[3].split(",")[0]
+    mappings.setdefault(fields[0], layout + (":" + variant if variant != "-" else ""))
+  # These console names have no entry in systemd's conversion table.
+  mappings.update({"azerty": "az", "bg-cp1251": "bg", "colemak": "us:colemak", "kyrgyz": "kg",
+                   "de_CH-latin1": "ch", "no-latin1": "no"})
   catalog = {}
-  for layout, label, languages, variants in controller("AvailableKeyboardLayouts"):
-    catalog[layout] = label
-    for variant, description, languages in variants:
-      catalog[f"{layout}:{variant}"] = description
+  for choice in choices.splitlines():
+    label, keymap, *input_settings = choice.split("|")
+    layout = input_settings[1] if len(input_settings) > 1 else mappings.get(keymap, keymap)
+    if label == "Lao":
+      layout = "la"
+    # Composition engines belong in Input Methods, not as duplicate US layouts.
+    catalog.setdefault(layout, label)
   return catalog
 
 
@@ -39,11 +53,11 @@ def picker_rows(catalog, selected):
   return rows
 
 
-def choose(title, catalog, selected, kind):
+def choose(title, catalog, selected, kind, overrides=None):
   catalog = {**catalog, **{key: catalog.get(key, key) for key in selected}}
   rows = picker_rows(catalog, selected)
   args = ["omarchy-menu-select", title] + list(rows.values())
-  on_change = ["python", str(setup.ROOT / "default/input-methods/typing.py"), "apply", kind, json.dumps(catalog)]
+  on_change = ["python", str(setup.ROOT / "default/input-methods/typing.py"), "apply", kind, json.dumps({"catalog": catalog, "overrides": overrides or {}})]
   args += ["--", "--multiple", "--width", "620", "--maxheight", "650", "--on-change", json.dumps(on_change)]
   for key in selected:
     args += ["--selected", rows[key][1:]]
@@ -52,11 +66,6 @@ def choose(title, catalog, selected, kind):
     return None
   if result.returncode:
     raise RuntimeError(result.stderr.strip() or "The selection menu could not open")
-  values = json.loads(result.stdout)
-  valid = {row[1:]: key for key, row in rows.items()}
-  if not isinstance(values, list) or any(not isinstance(value, str) or value not in valid for value in values):
-    raise ValueError("The menu returned an invalid selection")
-  return list(dict.fromkeys(valid[value] for value in values))
 
 
 def input_catalog(items):
@@ -68,11 +77,11 @@ def input_catalog(items):
   return catalog, available
 
 
-def input_items(items, selected):
+def input_items(items, selected, overrides=None):
   keyboard = [item for item in items if item[0].startswith("keyboard-")]
   if not keyboard:
     raise RuntimeError("The current input group has no keyboard input")
-  existing = dict(items)
+  existing = {**(overrides or {}), **dict(items)}
   return keyboard + [[name, existing.get(name, "")] for name in selected]
 
 
@@ -94,10 +103,10 @@ def configure_inputs():
   group, layout, items = setup.live_group()
   catalog, available = input_catalog(items)
   current = [name for name, override in items if not name.startswith("keyboard-")]
-  choose("Input Methods", catalog, current, "input")
+  choose("Input Methods", catalog, current, "input", dict(items))
 
 
-def save_inputs(selected):
+def save_inputs(selected, overrides=None):
   group, layout, items = setup.live_group()
   catalog, available = input_catalog(items)
   missing = [catalog.get(name, name) for name in selected if name not in available]
@@ -107,7 +116,7 @@ def save_inputs(selected):
   for name in selected:
     if name in setup.PRESETS:
       setup.font_default(config_home, name)
-  set_inputs(group, layout, items, input_items(items, selected))
+  set_inputs(group, layout, items, input_items(items, selected, overrides))
 
 
 def keyboard_values(selected):
@@ -171,16 +180,19 @@ def configure_keyboard():
   choose("Keyboard Layouts", catalog, current, "keyboard")
 
 
-def apply_selection(kind, catalog, values):
+def apply_selection(kind, context, values):
+  catalog = context["catalog"]
   rows = picker_rows(catalog, [])
   valid = {row[1:]: key for key, row in rows.items()}
   if not isinstance(values, list) or any(not isinstance(value, str) or value not in valid for value in values):
     raise ValueError("The menu returned an invalid selection")
   selected = list(dict.fromkeys(valid[value] for value in values))
   if kind == "input":
-    save_inputs(selected)
+    save_inputs(selected, context.get("overrides"))
   else:
     save_keyboard(selected)
+    selected = keyboard_selection()
+  print(json.dumps([rows[key][1:] for key in selected]))
 
 
 def main():
