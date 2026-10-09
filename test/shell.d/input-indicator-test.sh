@@ -140,6 +140,7 @@ def fake_process(command, **kwargs):
   return subprocess.CompletedProcess(command, 0, stdout="")
 with patch.object(indicator, "snapshot", side_effect=lambda bus: dict(live)), patch.object(indicator, "call", side_effect=fake_call), patch.object(indicator.subprocess, "run", side_effect=fake_process):
   reader = indicator.Indicator(None)
+  reader.last = "removed-engine"
   reader.select_next()
   assert keyboards[0]["active_layout_index"] == 1
   reader.select_next()
@@ -152,5 +153,21 @@ with patch.object(indicator, "snapshot", side_effect=lambda bus: dict(live)), pa
   assert keyboards[0]["active_layout_index"] == 0
   assert selected[-1] == "keyboard-us"
 print("ok - mixed-layout bar clicks queue an engine without focus and apply it when a text field gains focus")
+
+from unittest.mock import Mock
+callback = {}
+def register(source, flags, fn):
+  callback["read"] = fn
+  return 1
+def exercise():
+  assert callback["read"](None, None) == indicator.GLib.SOURCE_CONTINUE
+  assert callback["read"](None, None) == indicator.GLib.SOURCE_CONTINUE
+state = {"methods": ["keyboard-us", "pinyin"], "current": "keyboard-us", "name": "English", "label": "en", "language": "en"}
+loop = Mock()
+loop.run.side_effect = exercise
+with patch.object(indicator.GLib, "MainLoop", return_value=loop), patch.object(indicator.GLib, "io_add_watch", side_effect=register), patch.object(indicator.GLib, "timeout_add", return_value=1), patch.object(indicator.GLib, "source_remove"), patch.object(indicator.os, "read", return_value=b"cycle\n"), patch.object(indicator, "snapshot", return_value=state), patch.object(indicator.subprocess, "run", side_effect=[subprocess.CalledProcessError(1, "hyprctl"), subprocess.CompletedProcess([], 0, stdout='{"keyboards": []}')]), patch.object(indicator, "call") as call, patch("builtins.print"):
+  indicator.watch(None)
+  assert call.call_args.args[1] == "SetCurrentIM"
+print("ok - a failed compositor query leaves the bar click reader alive for the next request")
 
 PY

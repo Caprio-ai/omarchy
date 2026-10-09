@@ -114,7 +114,8 @@ class Indicator:
   def select_next(self):
     state = snapshot(self.bus)
     methods = state["methods"]
-    state["current"] = self.pending or state["current"] or self.last or next(iter(methods), "")
+    current = self.pending or state["current"] or self.last
+    state["current"] = current if current in methods else next(iter(methods), "")
     devices = subprocess.run(["hyprctl", "-j", "devices"], check=True, text=True, capture_output=True)
     keyboards = json.loads(devices.stdout).get("keyboards", [])
     following, index = cycle_choice(state, keyboards)
@@ -187,7 +188,7 @@ def watch(bus):
       if line == "cycle":
         try:
           indicator.select_next()
-        except GLib.Error:
+        except (GLib.Error, OSError, ValueError, subprocess.CalledProcessError):
           indicator.pending = ""
         refresh()
     GLib.source_remove(timer)
