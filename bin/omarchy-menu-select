@@ -3,7 +3,7 @@
 # omarchy:summary=Pick one or multiple options from a menu
 # omarchy:group=menu
 # omarchy:name=select
-# omarchy:args=prompt [option...] [-- --multiple --selected <value> --width <pixels> --maxheight <pixels>]
+# omarchy:args=prompt [option...] [-- --multiple --selected <value> --on-change <command-json> --width <pixels> --maxheight <pixels>]
 # omarchy:examples=omarchy menu select Format jpg png|omarchy-menu-select Resolution 4k 1080p 720p -- --width 400
 
 # An option may lead with an icon, as "<glyph><TAB><label>", and may trail a
@@ -14,7 +14,8 @@
 
 # With --multiple, clicking/Enter toggles rows and Apply returns a JSON array.
 # --on-change takes a JSON command array; each toggle runs it with the selection
-# JSON appended, applies immediately, and needs no Apply row.
+# JSON appended, applies immediately, and needs no Apply row. A successful
+# command may print a JSON array of actual selections to update the checkmarks.
 # --selected takes a returned value (label plus any subtext), and can be repeated.
 
 set -euo pipefail

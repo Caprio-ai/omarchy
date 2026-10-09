@@ -797,14 +797,9 @@ Item {
           root.applyDmenuSelection(JSON.stringify(MenuModel.dmenuSelections(root.dmenuOptions, root.dmenuSelected)))
         } else {
           var value = MenuModel.dmenuValue(root.dmenuOptions[Number(picked.itemId.substring(6))])
-          var selected = MenuModel.toggleDmenuSelection(root.dmenuSelected, value)
+          var selected = MenuModel.toggleDmenuSelection(selectionProc.requestedSelection(), value)
           if (root.dmenuOnChange.length > 0) {
-            if (selectionProc.running) return
-            selectionProc.collected = ""
-            selectionProc.serial = root.requestSerial
-            selectionProc.selected = MenuModel.dmenuSelections(root.dmenuOptions, selected, true)
-            selectionProc.command = root.dmenuOnChange.concat([JSON.stringify(selectionProc.selected)])
-            selectionProc.running = true
+            selectionProc.enqueue(selected)
           } else {
             root.dmenuSelected = selected
             root.updateDmenuChecks()
@@ -994,19 +989,54 @@ Item {
     id: selectionProc
     property int serial: 0
     property var selected: []
+    property var queue: []
     property string collected: ""
-    stdout: StdioCollector { onStreamFinished: selectionProc.collected = text }
-    onExited: function(exitCode) {
-      if (serial !== root.requestSerial || !root.dmenuActive) return
-      if (exitCode === 0) {
-        var applied = selected
-        if (collected.trim()) {
-          try { applied = JSON.parse(collected) } catch (error) { return }
-          if (!Array.isArray(applied)) return
-        }
-        root.dmenuSelected = MenuModel.dmenuSelections(root.dmenuOptions, applied, true)
+
+    function requestedSelection() {
+      for (var i = queue.length - 1; i >= 0; i--) {
+        if (queue[i].serial === root.requestSerial) return queue[i].selected
       }
-      root.updateDmenuChecks()
+      if (running && serial === root.requestSerial) return selected
+      return root.dmenuSelected
+    }
+
+    function enqueue(values) {
+      var selected = MenuModel.dmenuSelections(root.dmenuOptions, values, true)
+      queue = queue.concat([{
+        serial: root.requestSerial, selected: selected,
+        command: root.dmenuOnChange.concat([JSON.stringify(selected)])
+      }])
+      if (!running) startNext()
+    }
+
+    function startNext() {
+      if (queue.length === 0) return
+      var change = queue[0]
+      queue = queue.slice(1)
+      serial = change.serial
+      selected = change.selected
+      collected = ""
+      command = change.command
+      running = true
+    }
+
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: selectionProc.collected = text
+    }
+    onExited: function(exitCode) {
+      if (serial === root.requestSerial && root.dmenuActive) {
+        if (exitCode === 0) {
+          var applied = selected
+          if (collected.trim()) {
+            try { applied = JSON.parse(collected) } catch (error) { applied = root.dmenuSelected }
+          }
+          if (Array.isArray(applied))
+            root.dmenuSelected = MenuModel.dmenuSelections(root.dmenuOptions, applied, true)
+        }
+        root.updateDmenuChecks()
+      }
+      startNext()
     }
   }
 
