@@ -38,6 +38,8 @@ end
 o.bind("SUPER + I", "Switch input language", function()
   if has_input_method() then
     hl.exec_cmd("fcitx5-remote --check -t")
+  else
+    hl.exec_cmd("omarchy-shell -q omarchy.keyboard-layout cycle")
   end
 end)
 

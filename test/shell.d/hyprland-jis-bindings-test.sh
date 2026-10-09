@@ -129,5 +129,5 @@ TEST_KEYBOARD_ONLY=true TEST_FCITX5_CONFIG=$freed assert_fires "keyboard-only pr
 
 assert_fires "Super + I toggles configured input independently of custom Fcitx keys" \
   "exec fcitx5-remote --check -t" "SUPER + I" "chromium"
-TEST_KEYBOARD_ONLY=true assert_fires "Super + I leaves keyboard-only profiles alone" \
-  "" "SUPER + I" "foot" "terminal"
+TEST_KEYBOARD_ONLY=true assert_fires "Super + I cycles keyboard layouts without an input engine" \
+  "exec omarchy-shell -q omarchy.keyboard-layout cycle" "SUPER + I" "foot" "terminal"

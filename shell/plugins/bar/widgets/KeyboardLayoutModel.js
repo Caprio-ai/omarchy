@@ -119,13 +119,12 @@ function inputLabel(state, fallback) {
 
 function inputTooltip(state, layout, multipleLayouts) {
   if (!state || !state.methods || state.methods.length < 2)
-    return layout + (multipleLayouts ? "" : "\nClick to set up an input language")
+    return layout + (multipleLayouts ? " · Super + I" : "")
   return (state.name || layout).replace(/^Keyboard - /, "") + " · Super + I"
 }
 
 function showIndicator(layoutLabel, multipleLayouts, multipleInputs) {
-  return multipleInputs || (layoutLabel !== "" &&
-    (multipleLayouts || (layoutLabel !== "EN" && layoutLabel !== "ENG")))
+  return multipleInputs || (layoutLabel !== "" && multipleLayouts)
 }
 
 function layoutIndex(keyboard) {

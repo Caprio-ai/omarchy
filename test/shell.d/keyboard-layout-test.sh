@@ -17,12 +17,14 @@ assertEqual(model.inputLabel({ current: 'custom', language: 'vi' }, 'EN'), 'VI',
 assertEqual(model.inputTooltip(japanese, 'English (US)', false), 'Mozc · Super + I', 'input tooltip shows only its name and shortcut')
 assertEqual(model.inputTooltip(japanese, 'English (US)', true), 'Mozc · Super + I', 'multiple layouts keep the input tooltip compact')
 assertEqual(model.inputTooltip({ ...japanese, current: 'keyboard-us', name: 'Keyboard - English (US)' }, 'English (US)', false), 'English (US) · Super + I', 'Latin input omits the redundant keyboard prefix')
-assertEqual(model.inputTooltip({ methods: ['keyboard-fr'] }, 'French', false), 'French\nClick to set up an input language', 'one foreign mode offers input setup')
+assertEqual(model.inputTooltip({ methods: ['keyboard-fr'] }, 'French', false), 'French', 'a single layout tooltip stays compact')
 assertEqual(model.showIndicator('EN', false, false), false, 'English alone stays hidden')
 assertEqual(model.showIndicator('ENG', false, false), false, 'English before the brief table loads stays hidden')
-assertEqual(model.showIndicator('FR', false, false), true, 'a single non-English layout stays available')
+assertEqual(model.showIndicator('FR', false, false), false, 'French alone stays hidden')
 assertEqual(model.showIndicator('EN', false, true), true, 'Latin with another input mode stays available')
 assertEqual(model.showIndicator('EN', true, false), true, 'multiple keyboard layouts stay available')
+assertEqual(model.showIndicator('FR', true, false), true, 'French and English layouts stay available')
+assertEqual(model.inputTooltip({ methods: ['keyboard-fr'] }, 'French', true), 'French · Super + I', 'multiple layouts advertise their switching shortcut')
 
 // Trimmed from xkbcli list, keeping the format of every section it prints,
 // including the options nested under an option group: those quote their

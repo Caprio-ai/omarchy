@@ -91,6 +91,14 @@ BarWidget {
   //
   // Keyboards given their own kb_layout hold a different list and are left out:
   // an index into this list would not mean the same layout to them.
+  ShellIpc {
+    target: "omarchy.keyboard-layout"
+
+    function cycle(): void {
+      root.cycleLayout()
+    }
+  }
+
   function cycleLayout() {
     if (!root.bar || root.layoutCount < 2 || root.syncNames.length === 0) return
     const next = (root.layoutIndex + 1) % root.layoutCount
