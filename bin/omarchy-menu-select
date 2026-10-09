@@ -13,6 +13,8 @@
 # with same-named rows get the subtext back as the stable key.
 
 # With --multiple, clicking/Enter toggles rows and Apply returns a JSON array.
+# --on-change takes a JSON command array; each toggle runs it with the selection
+# JSON appended, applies immediately, and needs no Apply row.
 # --selected takes a returned value (label plus any subtext), and can be repeated.
 
 set -euo pipefail
@@ -29,6 +31,7 @@ options=()
 menu_width=""
 menu_maxheight=""
 multiple=0
+on_change="[]"
 selected=()
 
 while (( $# > 0 )); do
@@ -36,6 +39,14 @@ while (( $# > 0 )); do
     shift
     while (( $# > 0 )); do
       case "$1" in
+        --on-change)
+          shift
+          if (( $# == 0 )); then
+            echo "omarchy-menu-select: --on-change requires a JSON command array" >&2
+            exit 1
+          fi
+          on_change="$1"
+          ;;
         --multiple)
           multiple=1
           ;;
@@ -97,15 +108,16 @@ payload=$(perl -MEncode=decode -MJSON::PP=encode_json,decode_json -e '
     options => decode_json($ARGV[1]),
     multiple => $ARGV[6] ? JSON::PP::true : JSON::PP::false,
     selected => decode_json($ARGV[7]),
+    onChange => decode_json($ARGV[8]),
     selectionFile => decode("UTF-8", $ARGV[2]),
     doneFile => decode("UTF-8", $ARGV[3])
   };
   $payload->{width} = int($ARGV[4]) if length($ARGV[4] // "");
   $payload->{maxHeight} = int($ARGV[5]) if length($ARGV[5] // "");
   print encode_json($payload)
-' "$prompt" "$options_json" "$selection_file" "$done_file" "$menu_width" "$menu_maxheight" "$multiple" "$selected_json")
+' "$prompt" "$options_json" "$selection_file" "$done_file" "$menu_width" "$menu_maxheight" "$multiple" "$selected_json" "$on_change")
 
-omarchy-shell shell summon omarchy.menu "$payload" >/dev/null
+omarchy-shell shell summon omarchy.menu "$payload" >/dev/null || exit 2
 
 while [[ ! -e $done_file ]]; do
   sleep 0.05

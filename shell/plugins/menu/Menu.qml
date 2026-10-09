@@ -59,6 +59,7 @@ Item {
   property var dmenuOptions: []
   property bool dmenuMultiple: false
   property var dmenuSelected: []
+  property var dmenuOnChange: []
   property string selectionFile: ""
   property string doneFile: ""
   property int dmenuWidth: 300
@@ -565,7 +566,7 @@ Item {
       return
     }
 
-    if (root.dmenuMultiple) {
+    if (root.dmenuMultiple && root.dmenuOnChange.length === 0) {
       displayModel.append({
         itemId: "dmenu.apply", disabled: false, kind: "dmenu", icon: "", iconFont: "",
         appIcon: "", appId: "", label: "Apply", target: "",
@@ -614,6 +615,18 @@ Item {
     Qt.callLater(function() {
       if (displayModel.count > 0) root.revealCursor()
     })
+  }
+
+  function updateDmenuChecks() {
+    for (var i = 0; i < displayModel.count; i++) {
+      var row = displayModel.get(i)
+      if (row.itemId === "dmenu.apply") {
+        displayModel.setProperty(i, "detail", root.dmenuSelected.length + " selected")
+      } else if (row.kind === "dmenu") {
+        var value = MenuModel.dmenuValue(root.dmenuOptions[Number(row.itemId.substring(6))])
+        displayModel.setProperty(i, "icon", root.dmenuSelected.indexOf(value) !== -1 ? "✓" : "○")
+      }
+    }
   }
 
   function rebuildDisplay() {
@@ -784,8 +797,17 @@ Item {
           root.applyDmenuSelection(JSON.stringify(MenuModel.dmenuSelections(root.dmenuOptions, root.dmenuSelected)))
         } else {
           var value = MenuModel.dmenuValue(root.dmenuOptions[Number(picked.itemId.substring(6))])
-          root.dmenuSelected = MenuModel.toggleDmenuSelection(root.dmenuSelected, value)
-          root.rebuildDmenuDisplay()
+          var selected = MenuModel.toggleDmenuSelection(root.dmenuSelected, value)
+          if (root.dmenuOnChange.length > 0) {
+            if (selectionProc.running) return
+            selectionProc.serial = root.requestSerial
+            selectionProc.selected = MenuModel.dmenuSelections(root.dmenuOptions, selected)
+            selectionProc.command = root.dmenuOnChange.concat([JSON.stringify(selectionProc.selected)])
+            selectionProc.running = true
+          } else {
+            root.dmenuSelected = selected
+            root.updateDmenuChecks()
+          }
         }
       } else {
         root.applyDmenuSelection(picked.detail ? picked.label + "\t" + picked.detail : picked.label)
@@ -888,6 +910,8 @@ Item {
     dmenuPrompt = String(payload.prompt || (mode === "input" ? "Input" : "Select"))
     dmenuOptions = Array.isArray(payload.options) ? payload.options : []
     dmenuMultiple = mode === "select" && payload.multiple === true
+    dmenuOnChange = dmenuMultiple && Array.isArray(payload.onChange)
+      && payload.onChange.every(function(arg) { return typeof arg === "string" }) ? payload.onChange : []
     dmenuSelected = MenuModel.dmenuSelections(dmenuOptions, Array.isArray(payload.selected) ? payload.selected : [])
     selectionFile = String(payload.selectionFile || "")
     doneFile = String(payload.doneFile || "")
@@ -962,6 +986,17 @@ Item {
         if (root.filterText.trim()) root.loadProvidersForSearch()
       }
       root.startNextProvider()
+    }
+  }
+
+  Process {
+    id: selectionProc
+    property int serial: 0
+    property var selected: []
+    onExited: function(exitCode) {
+      if (serial !== root.requestSerial || !root.dmenuActive) return
+      if (exitCode === 0) root.dmenuSelected = selected
+      root.updateDmenuChecks()
     }
   }
 

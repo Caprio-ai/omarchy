@@ -19,6 +19,7 @@ class TypingSetupTest(unittest.TestCase):
   def test_variants_and_installer_binding_safety(self):
     self.assertEqual(typing.keyboard_values(["us:intl", "fr"]), ("us,fr", "intl,"))
     self.assertEqual(typing.keyboard_values(["ru:phonetic"]), ("us,ru", ",phonetic"))
+    self.assertEqual(typing.keyboard_values(["ru:phonetic", "us"]), ("us,ru", ",phonetic"))
     with self.assertRaises(ValueError):
       typing.keyboard_values([])
 
@@ -47,7 +48,7 @@ class TypingSetupTest(unittest.TestCase):
   def test_picker_preselects_current_entries_and_returns_empty_selection(self):
     result = subprocess.CompletedProcess([], 0, stdout="[]")
     with patch.object(typing.subprocess, "run", return_value=result) as process:
-      self.assertEqual(typing.choose("Inputs", {"mozc": "Japanese", "hangul": "Korean"}, ["hangul"]), [])
+      self.assertEqual(typing.choose("Inputs", {"mozc": "Japanese", "hangul": "Korean"}, ["hangul"], "input"), [])
       args = process.call_args.args[0]
       self.assertEqual(args[2], "\tKorean")
       self.assertIn("--multiple", args)
@@ -56,7 +57,14 @@ class TypingSetupTest(unittest.TestCase):
   def test_picker_rejects_unknown_returned_values(self):
     with patch.object(typing.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout='["unknown"]')):
       with self.assertRaises(ValueError):
-        typing.choose("Inputs", {"mozc": "Japanese"}, [])
+        typing.choose("Inputs", {"mozc": "Japanese"}, [], "input")
+
+  def test_immediate_selection_removes_an_input_and_accepts_keyboard_only(self):
+    with patch.object(typing, "save_inputs") as save:
+      typing.apply_selection("input", {"mozc": "Japanese", "hangul": "Korean"}, ["Japanese"])
+      save.assert_called_once_with(["mozc"])
+      typing.apply_selection("input", {"mozc": "Japanese"}, [])
+      self.assertEqual(save.call_args.args, ([],))
 
   def test_keyboard_override_failure_preserves_symlink_and_restores_settings(self):
     with tempfile.TemporaryDirectory() as temporary:

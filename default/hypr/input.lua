@@ -28,6 +28,17 @@ if non_latin_layouts:find(" " .. kb_layout:match("^[^,]*") .. " ", 1, true) then
   kb_options = kb_options .. ",grp:alts_toggle"
 end
 
+-- Saved selections already include their Latin-leading layout. Keep the
+-- installer's layout-switching shortcut when a non-Latin layout remains.
+if not kb_options:find("grp:alts_toggle", 1, true) then
+  for layout in kb_layout:gmatch("[^,]+") do
+    if non_latin_layouts:find(" " .. layout .. " ", 1, true) then
+      kb_options = kb_options .. ",grp:alts_toggle"
+      break
+    end
+  end
+end
+
 hl.config({
   input = {
     kb_layout = kb_layout,

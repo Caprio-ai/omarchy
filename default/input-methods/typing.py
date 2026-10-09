@@ -30,14 +30,21 @@ def keyboard_selection():
           for index, layout in enumerate(layouts)]
 
 
-def choose(title, catalog, selected):
+def picker_rows(catalog, selected):
   # Current entries stay first, in switching order, followed by the catalog.
   keys = list(dict.fromkeys(selected + sorted(catalog, key=lambda key: catalog[key])))
   labels = {key: catalog.get(key, key) for key in keys}
   counts = Counter(labels.values())
   rows = {key: "\t" + labels[key] + (f" ({key})" if counts[labels[key]] > 1 else "") for key in keys}
+  return rows
+
+
+def choose(title, catalog, selected, kind):
+  catalog = {**catalog, **{key: catalog.get(key, key) for key in selected}}
+  rows = picker_rows(catalog, selected)
   args = ["omarchy-menu-select", title] + list(rows.values())
-  args += ["--", "--multiple", "--width", "620", "--maxheight", "650"]
+  on_change = ["python", str(setup.ROOT / "default/input-methods/typing.py"), "apply", kind, json.dumps(catalog)]
+  args += ["--", "--multiple", "--width", "620", "--maxheight", "650", "--on-change", json.dumps(on_change)]
   for key in selected:
     args += ["--selected", rows[key][1:]]
   result = subprocess.run(args, text=True, capture_output=True)
@@ -87,21 +94,20 @@ def configure_inputs():
   group, layout, items = setup.live_group()
   catalog, available = input_catalog(items)
   current = [name for name, override in items if not name.startswith("keyboard-")]
-  selected = choose("Input Methods", catalog, current)
-  if selected is None:
-    return False
-  missing = [catalog[name] for name in selected if name not in available]
+  choose("Input Methods", catalog, current, "input")
+
+
+def save_inputs(selected):
+  group, layout, items = setup.live_group()
+  catalog, available = input_catalog(items)
+  missing = [catalog.get(name, name) for name in selected if name not in available]
   if missing:
     raise RuntimeError("Restart input after updating Omarchy to use: " + ", ".join(missing))
-  # Abort rather than overwrite a group changed while the picker was open.
-  if setup.live_group() != (group, layout, items):
-    raise RuntimeError("Input settings changed while the menu was open. Please try again.")
   config_home = Path(os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config"))
   for name in selected:
     if name in setup.PRESETS:
       setup.font_default(config_home, name)
   set_inputs(group, layout, items, input_items(items, selected))
-  return True
 
 
 def keyboard_values(selected):
@@ -110,7 +116,7 @@ def keyboard_values(selected):
   parts = [value.split(":", 1) for value in selected]
   # Preserve the installer's Latin-leading rule for desktop keybindings.
   if parts[0][0] in setup.NON_LATIN:
-    parts.insert(0, ["us"])
+    parts = [["us"]] + [part for part in parts if part != ["us"]]
   layouts = ",".join(part[0] for part in parts)
   variants = ",".join(part[1] if len(part) > 1 else "" for part in parts)
   return layouts, variants
@@ -123,16 +129,15 @@ def save_keyboard(selected):
   original = setup.read(path) if path.exists() else None
   group, old_layout, before = setup.live_group()
   group_changed = False
+  previous_errors = setup.run(["hyprctl", "configerrors"])
   try:
     setup.atomic_write(path, f"XKBLAYOUT={layouts}\nXKBVARIANT={variants}\n")
     setup.run(["hyprctl", "reload"])
     errors = setup.run(["hyprctl", "configerrors"])
-    if errors:
+    if errors and errors != previous_errors:
       raise RuntimeError(errors)
-    expected = [part[0] + (":" + part[1] if len(part) > 1 and part[1] else "")
-                for part in [value.split(":", 1) for value in selected]]
-    if selected[0].split(":", 1)[0] in setup.NON_LATIN:
-      expected.insert(0, "us")
+    expected = [layout + (":" + variant if variant else "")
+                for layout, variant in zip(layouts.split(","), variants.split(","))]
     if keyboard_selection() != expected:
       raise RuntimeError("Your personal keyboard layout override takes precedence over this selection")
     first_layout = layouts.split(",")[0]
@@ -152,36 +157,48 @@ def save_keyboard(selected):
       path.resolve().unlink(missing_ok=True)
     else:
       setup.atomic_write(path, original)
-    setup.run(["hyprctl", "reload"])
-    if group_changed:
-      setup.live_set(group, old_layout, before)
+    try:
+      setup.run(["hyprctl", "reload"])
+    finally:
+      if group_changed:
+        setup.live_set(group, old_layout, before)
     raise
 
 
 def configure_keyboard():
   current = keyboard_selection()
   catalog = keyboard_catalog()
-  selected = choose("Keyboard Layouts", catalog, current)
-  if selected is None:
-    return False
-  if keyboard_selection() != current:
-    raise RuntimeError("Keyboard settings changed while the menu was open. Please try again.")
-  save_keyboard(selected)
-  return True
+  choose("Keyboard Layouts", catalog, current, "keyboard")
+
+
+def apply_selection(kind, catalog, values):
+  rows = picker_rows(catalog, [])
+  valid = {row[1:]: key for key, row in rows.items()}
+  if not isinstance(values, list) or any(not isinstance(value, str) or value not in valid for value in values):
+    raise ValueError("The menu returned an invalid selection")
+  selected = list(dict.fromkeys(valid[value] for value in values))
+  if kind == "input":
+    save_inputs(selected)
+  else:
+    save_keyboard(selected)
 
 
 def main():
-  kind = sys.argv[1] if len(sys.argv) == 2 else ""
+  applying = len(sys.argv) == 5 and sys.argv[1] == "apply"
+  kind = sys.argv[2] if applying else sys.argv[1] if len(sys.argv) == 2 else ""
   if kind not in ("input", "keyboard"):
     raise ValueError("Choose keyboard or input setup")
   title = "Input methods" if kind == "input" else "Keyboard layouts"
   try:
-    applied = configure_inputs() if kind == "input" else configure_keyboard()
+    if applying:
+      apply_selection(kind, json.loads(sys.argv[3]), json.loads(sys.argv[4]))
+    elif kind == "input":
+      configure_inputs()
+    else:
+      configure_keyboard()
   except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
     subprocess.run(["omarchy-notification-send", title + " could not be updated", str(error)], check=True)
     raise SystemExit(1)
-  if applied:
-    subprocess.run(["omarchy-notification-send", title + " updated", "Use Super + I to switch inputs"], check=True)
 
 
 if __name__ == "__main__":
