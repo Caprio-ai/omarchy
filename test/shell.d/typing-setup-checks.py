@@ -65,6 +65,7 @@ class TypingSetupTest(unittest.TestCase):
       args = process.call_args.args[0]
       self.assertEqual(args[2], "\tKorean")
       self.assertIn("--multiple", args)
+      self.assertEqual(args[args.index("--change-key") + 1], "typing:input")
       self.assertEqual(args[-2:], ["--selected", "Korean"])
 
   def test_apply_rejects_unknown_values(self):

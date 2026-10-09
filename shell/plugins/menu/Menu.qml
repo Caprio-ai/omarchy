@@ -59,6 +59,7 @@ Item {
   property var dmenuOptions: []
   property bool dmenuMultiple: false
   property var dmenuSelected: []
+  property string dmenuChangeKey: ""
   property var dmenuOnChange: []
   property string selectionFile: ""
   property string doneFile: ""
@@ -908,7 +909,10 @@ Item {
     dmenuMultiple = mode === "select" && payload.multiple === true
     dmenuOnChange = dmenuMultiple && Array.isArray(payload.onChange)
       && payload.onChange.every(function(arg) { return typeof arg === "string" }) ? payload.onChange : []
+    dmenuChangeKey = String(payload.changeKey || JSON.stringify(dmenuOnChange))
     dmenuSelected = MenuModel.dmenuSelections(dmenuOptions, Array.isArray(payload.selected) ? payload.selected : [], dmenuOnChange.length > 0)
+    if (dmenuOnChange.length > 0)
+      dmenuSelected = MenuModel.dmenuSelections(dmenuOptions, selectionProc.requestedSelection(), true)
     selectionFile = String(payload.selectionFile || "")
     doneFile = String(payload.doneFile || "")
     requestActive = !!doneFile
@@ -988,22 +992,23 @@ Item {
   Process {
     id: selectionProc
     property int serial: 0
+    property string changeKey: ""
     property var selected: []
     property var queue: []
     property string collected: ""
 
     function requestedSelection() {
       for (var i = queue.length - 1; i >= 0; i--) {
-        if (queue[i].serial === root.requestSerial) return queue[i].selected
+        if (queue[i].key === root.dmenuChangeKey) return queue[i].selected
       }
-      if (running && serial === root.requestSerial) return selected
+      if (running && changeKey === root.dmenuChangeKey) return selected
       return root.dmenuSelected
     }
 
     function enqueue(values) {
       var selected = MenuModel.dmenuSelections(root.dmenuOptions, values, true)
       queue = queue.concat([{
-        serial: root.requestSerial, selected: selected,
+        serial: root.requestSerial, key: root.dmenuChangeKey, selected: selected,
         command: root.dmenuOnChange.concat([JSON.stringify(selected)])
       }])
       if (!running) startNext()
@@ -1014,6 +1019,7 @@ Item {
       var change = queue[0]
       queue = queue.slice(1)
       serial = change.serial
+      changeKey = change.key
       selected = change.selected
       collected = ""
       command = change.command
@@ -1025,7 +1031,7 @@ Item {
       onStreamFinished: selectionProc.collected = text
     }
     onExited: function(exitCode) {
-      if (serial === root.requestSerial && root.dmenuActive) {
+      if (changeKey === root.dmenuChangeKey && root.dmenuActive && root.dmenuOnChange.length > 0) {
         if (exitCode === 0) {
           var applied = selected
           if (collected.trim()) {

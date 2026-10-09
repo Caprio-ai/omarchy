@@ -3,7 +3,7 @@
 # omarchy:summary=Pick one or multiple options from a menu
 # omarchy:group=menu
 # omarchy:name=select
-# omarchy:args=prompt [option...] [-- --multiple --selected <value> --on-change <command-json> --width <pixels> --maxheight <pixels>]
+# omarchy:args=prompt [option...] [-- --multiple --selected <value> --on-change <command-json> --change-key <key> --width <pixels> --maxheight <pixels>]
 # omarchy:examples=omarchy menu select Format jpg png|omarchy-menu-select Resolution 4k 1080p 720p -- --width 400
 
 # An option may lead with an icon, as "<glyph><TAB><label>", and may trail a
@@ -33,6 +33,7 @@ menu_width=""
 menu_maxheight=""
 multiple=0
 on_change="[]"
+change_key=""
 selected=()
 
 while (( $# > 0 )); do
@@ -47,6 +48,14 @@ while (( $# > 0 )); do
             exit 1
           fi
           on_change="$1"
+          ;;
+        --change-key)
+          shift
+          if (( $# == 0 )); then
+            echo "omarchy-menu-select: --change-key requires a value" >&2
+            exit 1
+          fi
+          change_key="$1"
           ;;
         --multiple)
           multiple=1
@@ -110,13 +119,14 @@ payload=$(perl -MEncode=decode -MJSON::PP=encode_json,decode_json -e '
     multiple => $ARGV[6] ? JSON::PP::true : JSON::PP::false,
     selected => decode_json($ARGV[7]),
     onChange => decode_json($ARGV[8]),
+    changeKey => $ARGV[9],
     selectionFile => decode("UTF-8", $ARGV[2]),
     doneFile => decode("UTF-8", $ARGV[3])
   };
   $payload->{width} = int($ARGV[4]) if length($ARGV[4] // "");
   $payload->{maxHeight} = int($ARGV[5]) if length($ARGV[5] // "");
   print encode_json($payload)
-' "$prompt" "$options_json" "$selection_file" "$done_file" "$menu_width" "$menu_maxheight" "$multiple" "$selected_json" "$on_change")
+' "$prompt" "$options_json" "$selection_file" "$done_file" "$menu_width" "$menu_maxheight" "$multiple" "$selected_json" "$on_change" "$change_key")
 
 omarchy-shell shell summon omarchy.menu "$payload" >/dev/null || exit 2
 
