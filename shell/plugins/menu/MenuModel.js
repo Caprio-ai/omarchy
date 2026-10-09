@@ -501,6 +501,25 @@ function summonAction(action) {
   return { id: match[1], payload: match[2] || "{}" }
 }
 
+
+// Multi-select requests return stable values, without icons, in option order.
+function dmenuValue(option) {
+  var parts = String(option || "").split("\t")
+  if (parts.length > 1) parts.shift()
+  return parts.join("\t")
+}
+
+function dmenuSelections(options, selected) {
+  return options.map(dmenuValue).filter(function(value, index, values) {
+    return selected.indexOf(value) !== -1 && values.indexOf(value) === index
+  })
+}
+
+function toggleDmenuSelection(selected, value) {
+  return selected.indexOf(value) === -1 ? selected.concat([value])
+    : selected.filter(function(item) { return item !== value })
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     summonAction: summonAction,
@@ -531,6 +550,9 @@ if (typeof module !== "undefined") {
     descriptionTextMatches: descriptionTextMatches,
     matchesQuery: matchesQuery,
     searchScore: searchScore,
+    dmenuValue: dmenuValue,
+    dmenuSelections: dmenuSelections,
+    toggleDmenuSelection: toggleDmenuSelection,
     displayRow: displayRow
   }
 }

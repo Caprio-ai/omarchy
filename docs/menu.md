@@ -165,3 +165,6 @@ renders under the label, filters with it, and comes back as
 `label\tsubtext` so callers with same-named rows get a stable key. This is
 how the pickers behind menu actions (`omarchy-menu-plugin`,
 `omarchy-menu-timezone`, ...) present lists without owning any UI.
+
+
+Pass `-- --multiple` to `omarchy-menu-select` for a multi-select request. Repeat `--selected <value>` to preselect returned values (labels plus any subtext, without icons). Clicking or pressing Enter toggles an option without closing the menu; Apply returns a JSON array in option order, including `[]` when all choices are deselected. Cancellation still exits 1. Selections survive filtering.

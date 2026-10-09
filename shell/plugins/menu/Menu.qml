@@ -57,6 +57,8 @@ Item {
   readonly property bool dmenuActive: mode === "select" || mode === "input"
   property string dmenuPrompt: ""
   property var dmenuOptions: []
+  property bool dmenuMultiple: false
+  property var dmenuSelected: []
   property string selectionFile: ""
   property string doneFile: ""
   property int dmenuWidth: 300
@@ -563,6 +565,14 @@ Item {
       return
     }
 
+    if (root.dmenuMultiple) {
+      displayModel.append({
+        itemId: "dmenu.apply", disabled: false, kind: "dmenu", icon: "", iconFont: "",
+        appIcon: "", appId: "", label: "Apply", target: "",
+        detail: root.dmenuSelected.length + " selected", path: "", childCount: 0,
+        action: "", provider: "", score: -1, section: ""
+      })
+    }
     var query = root.filterText.trim().toLowerCase()
     for (var i = 0; i < root.dmenuOptions.length; i++) {
       // An option is "<label>", "<glyph>\t<label>", or
@@ -579,7 +589,7 @@ Item {
         itemId: "dmenu." + i,
         disabled: false,
         kind: "dmenu",
-        icon: icon,
+        icon: root.dmenuMultiple ? (root.dmenuSelected.indexOf(MenuModel.dmenuValue(root.dmenuOptions[i])) !== -1 ? "✓" : "○") : icon,
         iconFont: "",
         appIcon: "",
         appId: "",
@@ -769,7 +779,17 @@ Item {
       }
       if (index < 0 || index >= displayModel.count) return
       var picked = displayModel.get(index)
-      root.applyDmenuSelection(picked.detail ? picked.label + "\t" + picked.detail : picked.label)
+      if (root.dmenuMultiple) {
+        if (picked.itemId === "dmenu.apply") {
+          root.applyDmenuSelection(JSON.stringify(MenuModel.dmenuSelections(root.dmenuOptions, root.dmenuSelected)))
+        } else {
+          var value = MenuModel.dmenuValue(root.dmenuOptions[Number(picked.itemId.substring(6))])
+          root.dmenuSelected = MenuModel.toggleDmenuSelection(root.dmenuSelected, value)
+          root.rebuildDmenuDisplay()
+        }
+      } else {
+        root.applyDmenuSelection(picked.detail ? picked.label + "\t" + picked.detail : picked.label)
+      }
       return
     }
 
@@ -867,6 +887,8 @@ Item {
     mode = payload.mode === "input" ? "input" : "select"
     dmenuPrompt = String(payload.prompt || (mode === "input" ? "Input" : "Select"))
     dmenuOptions = Array.isArray(payload.options) ? payload.options : []
+    dmenuMultiple = mode === "select" && payload.multiple === true
+    dmenuSelected = MenuModel.dmenuSelections(dmenuOptions, Array.isArray(payload.selected) ? payload.selected : [])
     selectionFile = String(payload.selectionFile || "")
     doneFile = String(payload.doneFile || "")
     requestActive = !!doneFile

@@ -25,6 +25,13 @@ local function read_values(path)
   return values
 end
 
+function keyboard.selected()
+  local paths = require("default.hypr.paths")
+  local values = read_values(paths.config_home .. "/omarchy/keyboard-layouts")
+  if values.XKBLAYOUT then return values end
+  return keyboard.installed()
+end
+
 function keyboard.vconsole()
   return read_values("/etc/vconsole.conf")
 end
@@ -42,7 +49,7 @@ end
 -- Japanese (JIS) keyboards put +, ^, and the Henkan/Muhenkan keys where US
 -- keyboards don't, so a few defaults only apply when that layout leads.
 function keyboard.jis()
-  local layout = keyboard.installed().XKBLAYOUT or "us"
+  local layout = keyboard.selected().XKBLAYOUT or "us"
   return layout:match("^[^,]*") == "jp"
 end
 

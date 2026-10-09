@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# omarchy:summary=Set up Japanese, Korean, or Chinese typing
+# omarchy:summary=Select input methods for Japanese, Korean, or Chinese typing
 # omarchy:args=[mozc|hangul|pinyin|chewing]
 # omarchy:examples=omarchy setup input | omarchy setup input mozc
 # omarchy:requires-sudo=true
@@ -14,9 +14,8 @@ fi
 
 method=${1:-}
 if [[ -z $method ]]; then
-  choice=$(jq -r 'to_entries[] | select(.key != "none") | .value.label' "$OMARCHY_PATH/default/input-methods/presets.json" |
-    gum choose --header "Select input language")
-  method=$(jq -r --arg label "$choice" 'to_entries[] | select(.value.label == $label) | .key' "$OMARCHY_PATH/default/input-methods/presets.json")
+  python "$OMARCHY_PATH/default/input-methods/typing.py" input
+  exit
 fi
 
 case "$method" in

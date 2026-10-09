@@ -7,7 +7,7 @@ local keyboard = require("default.hypr.keyboard")
 local non_latin_layouts =
   " af am ara bd bg by et ge gr il in iq ir kg kh kz la lk mk mm mn mv np rs ru sy th tj ua "
 
-local vconsole = keyboard.installed()
+local vconsole = keyboard.selected()
 
 local kb_layout = vconsole.XKBLAYOUT or "us"
 local kb_variant = vconsole.XKBVARIANT or ""
