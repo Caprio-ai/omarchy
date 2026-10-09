@@ -29,6 +29,7 @@ Item {
   readonly property int lockDelaySeconds: IdleModel.delayAfterFirstIdle(lockTimeoutSeconds, firstIdleTimeoutSeconds)
   readonly property bool idleEnabled: stayAwakeStateLoaded && !stayAwake
   readonly property string screensaverClass: "org.omarchy.screensaver"
+  readonly property int screensaverSkippedLockedExitCode: 75
 
   property bool stayAwake: false
   property bool stayAwakeStateLoaded: false
@@ -70,7 +71,7 @@ Item {
   function launchScreensaver() {
     root.screensaverStartedThisCycle = true
     screensaverLaunchGraceTimer.restart()
-    runProcess(screensaverProcess, "screensaver", "[[ $(omarchy-shell lock isLocked 2>/dev/null) == \"true\" ]] || omarchy-launch-screensaver")
+    runProcess(screensaverProcess, "screensaver", "if [[ $(omarchy-shell lock isLocked 2>/dev/null) == \"true\" ]]; then exit " + root.screensaverSkippedLockedExitCode + "; else omarchy-launch-screensaver; fi")
   }
 
   function lockSystem(reason) {
@@ -114,13 +115,14 @@ Item {
     }
   }
 
-  function cancelIdleCycle(reason) {
+  function cancelIdleCycle(reason, sessionLocked) {
     logEvent("idle-cycle-cancel", reason || "requested")
     screensaverTimer.stop()
     lockTimer.stop()
     screensaverLaunchGraceTimer.stop()
 
-    if (root.idledThisCycle) runProcess(wakeProcess, "wake", "omarchy-system-wake")
+    // A locked session blanks and wakes its own displays.
+    if (root.idledThisCycle && !sessionLocked) runProcess(wakeProcess, "wake", "omarchy-system-wake")
 
     root.idledThisCycle = false
     root.screensaverStartedThisCycle = false
@@ -305,7 +307,10 @@ Item {
 
   Process {
     id: screensaverProcess
-    onExited: function(exitCode, exitStatus) { root.logEvent("process-exit", "screensaver exitCode=" + exitCode + " status=" + exitStatus) }
+    onExited: function(exitCode, exitStatus) {
+      root.logEvent("process-exit", "screensaver exitCode=" + exitCode + " status=" + exitStatus)
+      if (exitCode === root.screensaverSkippedLockedExitCode && root.idledThisCycle) root.cancelIdleCycle("session-locked", true)
+    }
   }
   Process {
     id: lockProcess

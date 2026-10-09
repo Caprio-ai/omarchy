@@ -55,6 +55,15 @@ assert(
   /onIdleTimersEnabledChanged: if \(!idleTimersEnabled\) cancelIdleCycle\(/.test(serviceSource),
   'idle ends a running cycle when both timeouts are set to 0'
 )
+assert(
+  /isLocked 2>\/dev\/null\) == \\"true\\" \]\]; then exit " \+ root\.screensaverSkippedLockedExitCode \+ "; else omarchy-launch-screensaver; fi/.test(serviceSource),
+  'idle reports a screensaver skipped because the session is locked'
+)
+assert(
+  /id: screensaverProcess[\s\S]*?exitCode === root\.screensaverSkippedLockedExitCode && root\.idledThisCycle\) root\.cancelIdleCycle\("session-locked", true\)/.test(serviceSource) &&
+    /if \(root\.idledThisCycle && !sessionLocked\) runProcess\(wakeProcess/.test(serviceSource),
+  'idle ends a cycle that finds the session locked without waking the display'
+)
 
 assertDeepEqual(idle.eventParts({ data: 'a,b,c' }, 2), ['a', 'b', 'c'], 'idle parses raw event data')
 assertDeepEqual(
