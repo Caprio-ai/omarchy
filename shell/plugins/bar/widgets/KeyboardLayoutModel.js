@@ -120,11 +120,7 @@ function inputLabel(state, fallback) {
 function inputTooltip(state, layout, multipleLayouts) {
   if (!state || !state.methods || state.methods.length < 2)
     return layout + (multipleLayouts ? "" : "\nClick to set up an input language")
-  var text = state.name + "\nClick to switch input language\nSuper + I to toggle input"
-  if (state.methods.indexOf("mozc") !== -1)
-    text += "\nJapanese: type a word, then Space twice for character choices"
-  if (multipleLayouts) text += "\nRight-click to switch keyboard layout"
-  return text
+  return (state.name || layout).replace(/^Keyboard - /, "") + " · Super + I"
 }
 
 function showIndicator(layoutLabel, multipleLayouts, multipleInputs) {
