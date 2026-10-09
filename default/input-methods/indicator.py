@@ -1,7 +1,10 @@
 """Live Fcitx state for the existing keyboard layout widget."""
 
+from collections import Counter
 import json
 import os
+import re
+import subprocess
 import sys
 
 from gi.repository import Gio, GLib
@@ -25,12 +28,49 @@ def snapshot(bus):
   return {"methods": methods, "current": info[0], "name": info[1], "label": info[4], "language": info[5]}
 
 
-def cycle(bus):
-  state = snapshot(bus)
+def cycle(bus, state=None):
+  state = state if state is not None else snapshot(bus)
   methods = state["methods"]
   if len(methods) > 1 and state["current"] in methods:
     following = methods[(methods.index(state["current"]) + 1) % len(methods)]
     call(bus, "SetCurrentIM", GLib.Variant("(s)", (following,)))
+
+
+def layout_switches(keyboards):
+  typed = [keyboard for keyboard in keyboards if not re.match(
+    r"^(hl-virtual-keyboard|power-button|sleep-button|lid-switch|video-bus)", keyboard.get("name", ""))]
+  typed = [item for item in typed if len(item.get("layout", "").split(",")) > 1]
+  if not typed:
+    return []
+  # Consumer controls also carry the seat layout. Its frequency keeps an
+  # individually configured keyboard from taking over the desktop shortcut.
+  counts = Counter(item.get("layout", "") for item in keyboards)
+  layout = max((item["layout"] for item in typed), key=lambda layout: counts[layout])
+  keyboard = max((item for item in typed if item["layout"] == layout),
+                 key=lambda item: item.get("active_layout_index", 0))
+  layout = keyboard.get("layout", "")
+  count = len(layout.split(","))
+  if count < 2:
+    return []
+  following = (keyboard.get("active_layout_index", 0) + 1) % count
+  return [["hyprctl", "switchxkblayout", item["name"], str(following)]
+          for item in keyboards if item.get("layout") == layout and item.get("name")]
+
+
+def cycle_input():
+  # Fcitx keyboard entries count as input methods too. With just one method,
+  # switch the compositor layouts even if the bar widget has been removed.
+  try:
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    state = snapshot(bus)
+  except GLib.Error:
+    state = {}
+  if len(state.get("methods", [])) > 1:
+    cycle(bus, state)
+  else:
+    devices = subprocess.run(["hyprctl", "-j", "devices"], check=True, text=True, capture_output=True)
+    for command in layout_switches(json.loads(devices.stdout).get("keyboards", [])):
+      subprocess.run(command, check=True, capture_output=True)
 
 
 class Indicator:
@@ -130,10 +170,9 @@ def watch(bus):
 
 if __name__ == "__main__":
   try:
-    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     if sys.argv[1:] == ["cycle"]:
-      cycle(bus)
+      cycle_input()
     else:
-      watch(bus)
-  except GLib.Error as error:
+      watch(Gio.bus_get_sync(Gio.BusType.SESSION, None))
+  except (GLib.Error, OSError, ValueError, subprocess.CalledProcessError) as error:
     raise SystemExit(str(error))

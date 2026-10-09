@@ -34,14 +34,8 @@ local function has_input_method()
 end
 
 -- Keep the desktop shortcut independent of Fcitx's custom switching keys.
--- Checking the profile on demand lets live setup work without a reload.
-o.bind("SUPER + I", "Switch input language", function()
-  if has_input_method() then
-    hl.exec_cmd("fcitx5-remote --check -t")
-  else
-    hl.exec_cmd("omarchy-shell -q omarchy.keyboard-layout cycle")
-  end
-end)
+-- Read the live Fcitx group so setup works without a compositor reload.
+o.bind("SUPER + I", "Switch input language", "omarchy-input-method cycle")
 
 -- Preserve custom Ctrl + Space triggers. Without a
 -- [Hotkey/TriggerKeys] list in the config, fcitx5 uses its default, which has

@@ -77,7 +77,11 @@ local bind = binds[os.getenv("TEST_KEYS")]
 if bind.options.non_consuming then
   print("non_consuming")
 end
-bind.dispatcher()
+if type(bind.dispatcher) == "string" then
+  print("exec " .. bind.dispatcher)
+else
+  bind.dispatcher()
+end
 LUA
 }
 
@@ -127,7 +131,7 @@ done
 TEST_KEYBOARD_ONLY=true TEST_FCITX5_CONFIG=$freed assert_fires "keyboard-only profiles skip the terminal controller call" \
   "non_consuming" "$prefix" "foot" "terminal"
 
-assert_fires "Super + I toggles configured input independently of custom Fcitx keys" \
-  "exec fcitx5-remote --check -t" "SUPER + I" "chromium"
+assert_fires "Super + I cycles configured input independently of custom Fcitx keys" \
+  "exec omarchy-input-method cycle" "SUPER + I" "chromium"
 TEST_KEYBOARD_ONLY=true assert_fires "Super + I cycles keyboard layouts without an input engine" \
-  "exec omarchy-shell -q omarchy.keyboard-layout cycle" "SUPER + I" "foot" "terminal"
+  "exec omarchy-input-method cycle" "SUPER + I" "foot" "terminal"

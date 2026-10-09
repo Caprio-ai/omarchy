@@ -71,4 +71,38 @@ with patch.object(indicator, "snapshot", side_effect=lambda bus: dict(live)), pa
   reader.refresh()
   assert reader.pending == ""
 print("ok - desktop clicks update the label, cycle pending choices, and apply once a text context exists")
+
+with patch.object(indicator.Gio, "bus_get_sync", return_value=None), patch.object(indicator, "snapshot", return_value={"methods": ["keyboard-us", "keyboard-fr"], "current": "keyboard-us"}), patch.object(indicator, "call") as call, patch.object(indicator.subprocess, "run") as process:
+  indicator.cycle_input()
+  assert call.call_args.args[2].unpack() == ("keyboard-fr",)
+  process.assert_not_called()
+print("ok - the shortcut cycles Fcitx keyboard methods without requiring a bar widget")
+
+keyboards = [
+  {"name": "power-button", "layout": "us,fr", "active_layout_index": 1},
+  {"name": "physical keyboard", "layout": "us,fr", "active_layout_index": 0},
+  {"name": "consumer-control", "layout": "us,fr", "active_layout_index": 0},
+  {"name": "custom", "layout": "de", "active_layout_index": 0},
+]
+expected = [["hyprctl", "switchxkblayout", item["name"], "1"] for item in keyboards[:3]]
+assert indicator.layout_switches(keyboards) == expected
+assert indicator.layout_switches([keyboards[-1]] + keyboards[:-1]) == expected
+assert indicator.layout_switches([{ "name": "custom-first", "layout": "us,de,fr", "active_layout_index": 2 }] + keyboards) == expected
+keyboards[1]["active_layout_index"] = 1
+assert all(command[-1] == "0" for command in indicator.layout_switches(keyboards))
+assert indicator.layout_switches([{ "name": "physical", "layout": "fr" }]) == []
+assert indicator.layout_switches([]) == []
+print("ok - layout switching synchronizes matching devices, wraps, and preserves device-specific layouts")
+
+import json
+import subprocess
+with patch.object(indicator.Gio, "bus_get_sync", return_value=None), patch.object(indicator, "snapshot", return_value={"methods": ["keyboard-us"]}), patch.object(indicator.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps({"keyboards": keyboards}))) as process:
+  indicator.cycle_input()
+  assert process.call_args_list[0].args[0] == ["hyprctl", "-j", "devices"]
+  assert [call.args[0] for call in process.call_args_list[1:]] == indicator.layout_switches(keyboards)
+print("ok - keyboard-only input falls back to compositor layouts")
+with patch.object(indicator.Gio, "bus_get_sync", side_effect=indicator.GLib.Error("no bus")), patch.object(indicator.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps({"keyboards": keyboards}))) as process:
+  indicator.cycle_input()
+  assert [call.args[0] for call in process.call_args_list[1:]] == indicator.layout_switches(keyboards)
+print("ok - compositor layouts switch even when the Fcitx bus is unavailable")
 PY

@@ -1,9 +1,13 @@
 #!/bin/bash
 
-# omarchy:summary=Configure or inspect the input method selected at installation
-# omarchy:args=<status|configure [--seed|--defaults] [none|mozc|hangul|pinyin|chewing]>
+# omarchy:summary=Configure, inspect, or switch input methods
+# omarchy:args=<status|cycle|configure [--seed|--defaults] [none|mozc|hangul|pinyin|chewing]>
 # omarchy:hidden=true
 
 set -euo pipefail
 
-python "$OMARCHY_PATH/default/input-methods/configure.py" "$@"
+if [[ ${1:-} == "cycle" ]]; then
+  python "$OMARCHY_PATH/default/input-methods/indicator.py" cycle
+else
+  python "$OMARCHY_PATH/default/input-methods/configure.py" "$@"
+fi
