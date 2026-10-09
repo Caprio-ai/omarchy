@@ -15,6 +15,7 @@
     "displayName": "Keyboard layout",
     "description": "Current keyboard layout and input language, click cycles",
     "category": "Compositor",
+    "defaultSection": "right",
     "allowMultiple": false
   },
   "omarchy": {
